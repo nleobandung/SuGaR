@@ -27,7 +27,11 @@ setup(
             "spatial.cu", 
             "simple_knn.cu",
             "ext.cpp"],
-            extra_compile_args={"nvcc": [], "cxx": cxx_compiler_flags})
+            extra_compile_args={"nvcc": [
+                "-I" + os.path.join(os.path.dirname(os.path.abspath(__file__)), "third_party/glm/"),
+                "-I" + os.path.join(os.environ.get("CONDA_PREFIX", ""), "targets/x86_64-linux/include"),
+                "-I" + os.path.join(os.environ.get("CONDA_PREFIX", ""), "include")
+            ]})
         ],
     cmdclass={
         'build_ext': BuildExtension

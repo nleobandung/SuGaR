@@ -3,6 +3,8 @@ from sugar_utils.general_utils import str2bool
 from sugar_trainers.coarse_density import coarse_training_with_density_regularization
 from sugar_trainers.coarse_sdf import coarse_training_with_sdf_regularization
 from sugar_trainers.coarse_density_and_dn_consistency import coarse_training_with_density_regularization_and_dn_consistency
+from sugar_trainers.coarse_without_regularization import coarse_training_without_regularization
+from sugar_trainers.coarse_without_reg_entropy import coarse_training_without_reg_and_entropy
 from sugar_extractors.coarse_mesh import extract_mesh_from_coarse_sugar
 from sugar_trainers.refine import refined_training
 from sugar_extractors.refined_mesh import extract_mesh_and_texture_from_refined_sugar
@@ -31,7 +33,7 @@ if __name__ == "__main__":
     
     # Regularization for coarse SuGaR
     parser.add_argument('-r', '--regularization_type', type=str,
-                        help='(Required) Type of regularization to use for coarse SuGaR. Can be "sdf", "density" or "dn_consistency". ' 
+                        help='(Required) Type of regularization to use for coarse SuGaR. Can be "sdf", "density", "dn_consistency", "no_regularization", or "no_reg_and_entropy". ' 
                         'We recommend using "dn_consistency" for the best mesh quality.')
     
     # Extract mesh
@@ -131,6 +133,10 @@ if __name__ == "__main__":
         coarse_sugar_path = coarse_training_with_density_regularization(coarse_args)
     elif args.regularization_type == 'dn_consistency':
         coarse_sugar_path = coarse_training_with_density_regularization_and_dn_consistency(coarse_args)
+    elif args.regularization_type == 'no_regularization':
+        coarse_sugar_path = coarse_training_without_regularization(coarse_args)
+    elif args.regularization_type == 'no_reg_and_entropy':
+        coarse_sugar_path = coarse_training_without_reg_and_entropy(coarse_args)
     else:
         raise ValueError(f'Unknown regularization type: {args.regularization_type}')
     
