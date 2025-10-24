@@ -25,8 +25,7 @@ if __name__ == "__main__":
     
     # Regularization for coarse SuGaR
     parser.add_argument('-r', '--regularization_type', type=str,
-                        help='(Required) Type of regularization to use for coarse SuGaR. Can be "sdf", "density" or "dn_consistency". ' 
-                        'We recommend using "dn_consistency" for the best mesh quality.')
+                        help='(Required) Type of regularization to use for coarse SuGaR. Can be "sdf", "density", "dn_consistency", "no_regularization", or "no_reg_and_entropy". ')
     
     # Extract mesh
     parser.add_argument('-l', '--surface_level', type=float, default=0.3, 
