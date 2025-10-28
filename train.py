@@ -1,9 +1,5 @@
 import argparse
 from sugar_utils.general_utils import str2bool
-from sugar_trainers.coarse_density import coarse_training_with_density_regularization
-from sugar_trainers.coarse_sdf import coarse_training_with_sdf_regularization
-from sugar_trainers.coarse_density_and_dn_consistency import coarse_training_with_density_regularization_and_dn_consistency
-from sugar_trainers.coarse_without_regularization import coarse_training_without_regularization
 from sugar_trainers.coarse_without_reg_entropy import coarse_training_without_reg_and_entropy
 from sugar_extractors.coarse_mesh import extract_mesh_from_coarse_sugar
 from sugar_trainers.refine import refined_training
@@ -76,14 +72,6 @@ if __name__ == "__main__":
                         help='If True, export a ply file with the refined 3D Gaussians at the end of the training. '
                         'This file can be large (+/- 500MB), but is needed for using the dedicated viewer. Default is True.')
     
-    # (Optional) Default configurations
-    parser.add_argument('--low_poly', type=str2bool, default=False, 
-                        help='Use standard config for a low poly mesh, with 200k vertices and 6 Gaussians per triangle.')
-    parser.add_argument('--high_poly', type=str2bool, default=False,
-                        help='Use standard config for a high poly mesh, with 1M vertices and 1 Gaussians per triangle.')
-    parser.add_argument('--refinement_time', type=str, default=None, 
-                        help="Default configs for time to spend on refinement. Can be 'short', 'medium' or 'long'.")
-      
     # Evaluation split
     parser.add_argument('--eval', type=str2bool, default=True, help='Use eval split.')
 
@@ -93,23 +81,12 @@ if __name__ == "__main__":
 
     # Parse arguments
     args = parser.parse_args()
-    if args.low_poly:
-        args.n_vertices_in_mesh = 200_000
-        args.gaussians_per_triangle = 6
-        print('Using low poly config.')
-    if args.high_poly:
-        args.n_vertices_in_mesh = 1_000_000
-        args.gaussians_per_triangle = 1
-        print('Using high poly config.')
-    if args.refinement_time == 'short':
-        args.refinement_iterations = 2_000
-        print('Using short refinement time.')
-    if args.refinement_time == 'medium':
-        args.refinement_iterations = 7_000
-        print('Using medium refinement time.')
-    if args.refinement_time == 'long':
-        args.refinement_iterations = 15_000
-        print('Using long refinement time.')
+    args.n_vertices_in_mesh = 1_000_000
+    args.gaussians_per_triangle = 1
+    args.refinement_iterations = 2_000
+    print('Using high poly config.')
+    print('Using short refinement time.')
+
     if args.export_uv_textured_mesh:
         print('Will export a UV-textured mesh as an .obj file.')
     if args.export_ply:
@@ -127,15 +104,8 @@ if __name__ == "__main__":
         'gpu': args.gpu,
         'white_background': args.white_background,
     })
-    if args.regularization_type == 'sdf':
-        coarse_sugar_path = coarse_training_with_sdf_regularization(coarse_args)
-    elif args.regularization_type == 'density':
-        coarse_sugar_path = coarse_training_with_density_regularization(coarse_args)
-    elif args.regularization_type == 'dn_consistency':
-        coarse_sugar_path = coarse_training_with_density_regularization_and_dn_consistency(coarse_args)
-    elif args.regularization_type == 'no_regularization':
-        coarse_sugar_path = coarse_training_without_regularization(coarse_args)
-    elif args.regularization_type == 'no_reg_and_entropy':
+    
+    if args.regularization_type == 'no_reg_and_entropy':
         coarse_sugar_path = coarse_training_without_reg_and_entropy(coarse_args)
     else:
         raise ValueError(f'Unknown regularization type: {args.regularization_type}')
