@@ -1,9 +1,5 @@
 import argparse
 from sugar_utils.general_utils import str2bool
-from sugar_trainers.coarse_density import coarse_training_with_density_regularization
-from sugar_trainers.coarse_sdf import coarse_training_with_sdf_regularization
-from sugar_trainers.coarse_density_and_dn_consistency import coarse_training_with_density_regularization_and_dn_consistency
-from sugar_trainers.coarse_without_regularization import coarse_training_without_regularization
 from sugar_trainers.coarse_without_reg_entropy import coarse_training_without_reg_and_entropy
 from sugar_extractors.coarse_mesh import extract_mesh_from_coarse_sugar
 from sugar_trainers.refine import refined_training
@@ -31,11 +27,6 @@ if __name__ == "__main__":
                         type=int, default=7000, 
                         help='iteration to load.')
     
-    # Regularization for coarse SuGaR
-    parser.add_argument('-r', '--regularization_type', type=str,
-                        help='(Required) Type of regularization to use for coarse SuGaR. Can be "sdf", "density", "dn_consistency", "no_regularization", or "no_reg_and_entropy". ' 
-                        'We recommend using "dn_consistency" for the best mesh quality.')
-    
     # Extract mesh
     parser.add_argument('-l', '--surface_level', type=float, default=0.3, 
                         help='Surface level to extract the mesh at. Default is 0.3')
@@ -50,11 +41,9 @@ if __name__ == "__main__":
     parser.add_argument('--center_bbox', type=str2bool, default=True, 
                         help='If True, center the bbox. Default is False.')
     
-    # Parameters for refined SuGaR
+    # Parameters for refined SuGaR (refinement_iterations is set to 0, but logic still runs)
     parser.add_argument('-g', '--gaussians_per_triangle', type=int, default=1, 
                         help='Number of gaussians per triangle.')
-    parser.add_argument('-f', '--refinement_iterations', type=int, default=15_000, 
-                        help='Number of refinement iterations.')
     
     # (Optional) Parameters for textured mesh extraction
     parser.add_argument('-t', '--export_uv_textured_mesh', type=str2bool, default=True, 
@@ -81,9 +70,6 @@ if __name__ == "__main__":
                         help='Use standard config for a low poly mesh, with 200k vertices and 6 Gaussians per triangle.')
     parser.add_argument('--high_poly', type=str2bool, default=False,
                         help='Use standard config for a high poly mesh, with 1M vertices and 1 Gaussians per triangle.')
-    parser.add_argument('--refinement_time', type=str, default=None, 
-                        help="Default configs for time to spend on refinement. Can be 'short', 'medium' or 'long'.")
-      
     # Evaluation split
     parser.add_argument('--eval', type=str2bool, default=True, help='Use eval split.')
 
@@ -101,15 +87,10 @@ if __name__ == "__main__":
         args.n_vertices_in_mesh = 1_000_000
         args.gaussians_per_triangle = 1
         print('Using high poly config.')
-    if args.refinement_time == 'short':
-        args.refinement_iterations = 2_000
-        print('Using short refinement time.')
-    if args.refinement_time == 'medium':
-        args.refinement_iterations = 7_000
-        print('Using medium refinement time.')
-    if args.refinement_time == 'long':
-        args.refinement_iterations = 15_000
-        print('Using long refinement time.')
+    # Set refinement iterations to 0 (refinement logic still runs, just with 0 iterations)
+    args.refinement_iterations = 0
+    args.refinement_iterations = 2000
+    
     if args.export_uv_textured_mesh:
         print('Will export a UV-textured mesh as an .obj file.')
     if args.export_ply:
@@ -127,18 +108,8 @@ if __name__ == "__main__":
         'gpu': args.gpu,
         'white_background': args.white_background,
     })
-    if args.regularization_type == 'sdf':
-        coarse_sugar_path = coarse_training_with_sdf_regularization(coarse_args)
-    elif args.regularization_type == 'density':
-        coarse_sugar_path = coarse_training_with_density_regularization(coarse_args)
-    elif args.regularization_type == 'dn_consistency':
-        coarse_sugar_path = coarse_training_with_density_regularization_and_dn_consistency(coarse_args)
-    elif args.regularization_type == 'no_regularization':
-        coarse_sugar_path = coarse_training_without_regularization(coarse_args)
-    elif args.regularization_type == 'no_reg_and_entropy':
-        coarse_sugar_path = coarse_training_without_reg_and_entropy(coarse_args)
-    else:
-        raise ValueError(f'Unknown regularization type: {args.regularization_type}')
+    # Always use coarse training without regularization and entropy
+    coarse_sugar_path = coarse_training_without_reg_and_entropy(coarse_args)
     
     
     # ----- Extract mesh from coarse SuGaR -----

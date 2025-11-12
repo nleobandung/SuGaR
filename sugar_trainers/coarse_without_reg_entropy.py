@@ -102,99 +102,13 @@ def coarse_training_without_reg_and_entropy(args):
     if loss_function == 'l1+dssim':
         dssim_factor = 0.2
 
-    # Regularization
-    enforce_entropy_regularization = False
-    if enforce_entropy_regularization:
-        start_entropy_regularization_from = 7000
-        end_entropy_regularization_at = 9000  # TODO: Change
-        entropy_regularization_factor = 0.1
-            
-    regularize_sdf = False
-    if regularize_sdf:
-        beta_mode = 'average'  # 'learnable', 'average' or 'weighted_average'
-        
-        start_sdf_regularization_from = 9000
-        regularize_sdf_only_for_gaussians_with_high_opacity = False
-        if regularize_sdf_only_for_gaussians_with_high_opacity:
-            sdf_regularization_opacity_threshold = 0.5
-            
-        use_sdf_estimation_loss = True
-        enforce_samples_to_be_on_surface = False
-        if use_sdf_estimation_loss or enforce_samples_to_be_on_surface:
-            sdf_estimation_mode = 'sdf'  # 'sdf' or 'density'
-            # sdf_estimation_factor = 0.2  # 0.1 or 0.2?
-            samples_on_surface_factor = 0.2  # 0.05
-            
-            squared_sdf_estimation_loss = False
-            squared_samples_on_surface_loss = False
-            
-            normalize_by_sdf_std = False  # False
-            
-            start_sdf_estimation_from = 9000  # 7000
-            
-            sample_only_in_gaussians_close_to_surface = True
-            close_gaussian_threshold = 2.  # 2.
-            
-            backpropagate_gradients_through_depth = True  # True
-            
-        use_sdf_better_normal_loss = True
-        if use_sdf_better_normal_loss:
-            start_sdf_better_normal_from = 9000
-            # sdf_better_normal_factor = 0.2  # 0.1 or 0.2?
-            sdf_better_normal_gradient_through_normal_only = True
-        
-        density_factor = 1. / 16. # 1. / 16.
-        if (use_sdf_estimation_loss or enforce_samples_to_be_on_surface) and sdf_estimation_mode == 'density':
-            density_factor = 1.
-        density_threshold = 1.  # 0.3 * density_factor
-        n_samples_for_sdf_regularization = 1_000_000  # 300_000
-        sdf_sampling_scale_factor = 1.5
-        sdf_sampling_proportional_to_volume = False
-        
-    bind_to_surface_mesh = False
-    if bind_to_surface_mesh:
-        learn_surface_mesh_positions = True
-        learn_surface_mesh_opacity = True
-        learn_surface_mesh_scales = True
-        n_gaussians_per_surface_triangle=6  # 1, 3, 4 or 6
-        
-        use_surface_mesh_laplacian_smoothing_loss = True
-        if use_surface_mesh_laplacian_smoothing_loss:
-            surface_mesh_laplacian_smoothing_method = "uniform"  # "cotcurv", "cot", "uniform"
-            surface_mesh_laplacian_smoothing_factor = 5.  # 0.1
-        
-        use_surface_mesh_normal_consistency_loss = True
-        if use_surface_mesh_normal_consistency_loss:
-            surface_mesh_normal_consistency_factor = 0.1  # 0.1
-            
-        densify_from_iter = 999_999
-        densify_until_iter = 0
-        position_lr_init=0.00016 * 0.01
-        position_lr_final=0.0000016 * 0.01
-        scaling_lr=0.005
-    else:
-        surface_mesh_to_bind_path = None
-        
-    if regularize_sdf:
-        regularize = True
-        regularity_knn = 16  # 8 until now
-        # regularity_knn = 8
-        regularity_samples = -1 # Retry with 1000, 10000
-        reset_neighbors_every = 500  # 500 until now
-        regularize_from = 7000  # 0 until now
-        start_reset_neighbors_from = 7000+1  # 0 until now (should be equal to regularize_from + 1?)
-        prune_when_starting_regularization = False
-    else:
-        regularize = False
-        regularity_knn = 0
-    if bind_to_surface_mesh:
-        regularize = False
-        regularity_knn = 0
+    # No regularization (entropy and SDF regularization disabled)
+    regularize = False
+    regularity_knn = 0
+    beta_mode = None
         
     # Opacity management
     prune_low_opacity_gaussians_at = []
-    if bind_to_surface_mesh:
-        prune_low_opacity_gaussians_at = [999_999]
     prune_hard_opacity_threshold = 0.5
 
     # Warmup
@@ -234,9 +148,6 @@ def coarse_training_without_reg_and_entropy(args):
     source_path = args.scene_path
     gs_checkpoint_path = args.checkpoint_path
     iteration_to_load = args.iteration_to_load    
-    
-    sdf_estimation_factor = args.estimation_factor
-    sdf_better_normal_factor = args.normal_factor
     
     sugar_checkpoint_path = f'sugarcoarse_3Dgs{iteration_to_load}_without_reg_and_entropy/'
     sugar_checkpoint_path = os.path.join(args.output_dir, sugar_checkpoint_path)
@@ -327,22 +238,6 @@ def coarse_training_without_reg_and_entropy(args):
             n_points = len(points)
             
     CONSOLE.print(f"Point cloud generated. Number of points: {len(points)}")
-    
-    # Mesh to bind to if needed  TODO
-    if bind_to_surface_mesh:
-        surface_mesh_to_bind_full_path = os.path.join('./results/meshes/', surface_mesh_to_bind_path)
-        CONSOLE.print(f'\nLoading mesh to bind to: {surface_mesh_to_bind_full_path}...')
-        o3d_mesh = o3d.io.read_triangle_mesh(surface_mesh_to_bind_full_path)
-        CONSOLE.print("Mesh to bind to loaded.")
-    else:
-        o3d_mesh = None
-        learn_surface_mesh_positions = False
-        learn_surface_mesh_opacity = False
-        learn_surface_mesh_scales = False
-        n_gaussians_per_surface_triangle=1
-    
-    if not regularize_sdf:
-        beta_mode = None
         
     # Background tensor if needed
     if use_white_background:
@@ -354,22 +249,22 @@ def coarse_training_without_reg_and_entropy(args):
     # Construct SuGaR model
     sugar = SuGaR(
         nerfmodel=nerfmodel,
-        points=points, #nerfmodel.gaussians.get_xyz.data,
-        colors=colors, #0.5 + _C0 * nerfmodel.gaussians.get_features.data[:, 0, :],
+        points=points,
+        colors=colors,
         initialize=True,
         sh_levels=sh_levels,
         learnable_positions=learnable_positions,
         triangle_scale=triangle_scale,
-        keep_track_of_knn=regularize,
-        knn_to_track=regularity_knn,
-        beta_mode=beta_mode,
+        keep_track_of_knn=False,
+        knn_to_track=0,
+        beta_mode=None,
         freeze_gaussians=freeze_gaussians,
-        surface_mesh_to_bind=o3d_mesh,
+        surface_mesh_to_bind=None,
         surface_mesh_thickness=None,
-        learn_surface_mesh_positions=learn_surface_mesh_positions,
-        learn_surface_mesh_opacity=learn_surface_mesh_opacity,
-        learn_surface_mesh_scales=learn_surface_mesh_scales,
-        n_gaussians_per_surface_triangle=n_gaussians_per_surface_triangle,
+        learn_surface_mesh_positions=False,
+        learn_surface_mesh_opacity=False,
+        learn_surface_mesh_scales=False,
+        n_gaussians_per_surface_triangle=1,
         )
     
     if initialize_from_trained_3dgs:
@@ -478,18 +373,12 @@ def coarse_training_without_reg_and_entropy(args):
             # Update learning rates
             optimizer.update_learning_rate(iteration)
             
-            # Prune low-opacity gaussians for optimizing triangles
-            if (
-                regularize and prune_when_starting_regularization and iteration == regularize_from + 1
-                ) or (
-                (iteration-1) in prune_low_opacity_gaussians_at
-                ):
+            # Prune low-opacity gaussians
+            if (iteration-1) in prune_low_opacity_gaussians_at:
                 CONSOLE.print("\nPruning gaussians with low-opacity for further optimization...")
                 prune_mask = (gaussian_densifier.model.strengths < prune_hard_opacity_threshold).squeeze()
                 gaussian_densifier.prune_points(prune_mask)
                 CONSOLE.print(f'Pruning finished: {sugar.n_points} gaussians left.')
-                if regularize and iteration >= start_reset_neighbors_from:
-                    sugar.reset_neighbors()
             
             start_idx = i
             end_idx = min(i+train_num_images_per_batch, train_num_images)
@@ -509,7 +398,7 @@ def coarse_training_without_reg_and_entropy(args):
                     return_2d_radii=True,
                     quaternions=None,
                     use_same_scale_in_all_directions=use_same_scale_in_all_directions,
-                    return_opacities=enforce_entropy_regularization,
+                    return_opacities=False,
                     )
                 pred_rgb = outputs['image'].view(-1, 
                     sugar.image_height, 
@@ -517,8 +406,6 @@ def coarse_training_without_reg_and_entropy(args):
                     3)
                 radii = outputs['radii']
                 viewspace_points = outputs['viewspace_points']
-                if enforce_entropy_regularization:
-                    opacities = outputs['opacities']
                 
                 pred_rgb = pred_rgb.transpose(-1, -2).transpose(-2, -3)  # TODO: Change for torch.permute
                 
@@ -529,202 +416,9 @@ def coarse_training_without_reg_and_entropy(args):
                     
                 # Compute loss 
                 loss = loss_fn(pred_rgb, gt_rgb)
-                        
-                if enforce_entropy_regularization and iteration > start_entropy_regularization_from and iteration < end_entropy_regularization_at:
-                    if iteration == start_entropy_regularization_from + 1:
-                        CONSOLE.print("\n---INFO---\nStarting entropy regularization.")
-                    if iteration == end_entropy_regularization_at - 1:
-                        CONSOLE.print("\n---INFO---\nStopping entropy regularization.")
-                    visibility_filter = radii > 0
-                    if visibility_filter is not None:
-                        vis_opacities = opacities[visibility_filter]
-                    else:
-                        vis_opacities = opacities
-                    loss = loss + entropy_regularization_factor * (
-                        - vis_opacities * torch.log(vis_opacities + 1e-10)
-                        - (1 - vis_opacities) * torch.log(1 - vis_opacities + 1e-10)
-                        ).mean()
-                
-                if regularize:
-                    if iteration == regularize_from:
-                        CONSOLE.print("Starting regularization...")
-                        # sugar.reset_neighbors()
-                    if iteration > regularize_from:
-                        visibility_filter = radii > 0
-                        if (iteration >= start_reset_neighbors_from) and ((iteration == regularize_from + 1) or (iteration % reset_neighbors_every == 0)):
-                            CONSOLE.print("\n---INFO---\nResetting neighbors...")
-                            sugar.reset_neighbors()
-                        neighbor_idx = sugar.get_neighbors_of_random_points(num_samples=regularity_samples,)  # TODO: REMOVE THIS PART
-                        if visibility_filter is not None:
-                            neighbor_idx = neighbor_idx[visibility_filter]  # TODO: Error here
-
-                        if regularize_sdf and iteration > start_sdf_regularization_from:
-                            if iteration == start_sdf_regularization_from + 1:
-                                CONSOLE.print("\n---INFO---\nStarting SDF regularization.")
-                            
-                            sampling_mask = visibility_filter
-                            
-                            if (use_sdf_estimation_loss or enforce_samples_to_be_on_surface) and iteration > start_sdf_estimation_from:
-                                if iteration == start_sdf_estimation_from + 1:
-                                    CONSOLE.print("\n---INFO---\nStarting SDF estimation loss.")
-                                fov_camera = nerfmodel.training_cameras.p3d_cameras[camera_indices.item()]
-                                
-                                # Render a depth map using gaussian splatting
-                                if backpropagate_gradients_through_depth:                                
-                                    point_depth = fov_camera.get_world_to_view_transform().transform_points(sugar.points)[..., 2:].expand(-1, 3)
-                                    max_depth = point_depth.max()
-                                    depth = sugar.render_image_gaussian_rasterizer(
-                                                camera_indices=camera_indices.item(),
-                                                bg_color=max_depth + torch.zeros(3, dtype=torch.float, device=sugar.device),
-                                                sh_deg=0,
-                                                compute_color_in_rasterizer=False,#compute_color_in_rasterizer,
-                                                compute_covariance_in_rasterizer=True,
-                                                return_2d_radii=False,
-                                                use_same_scale_in_all_directions=False,
-                                                point_colors=point_depth,
-                                            )[..., 0]
-                                else:
-                                    with torch.no_grad():
-                                        point_depth = fov_camera.get_world_to_view_transform().transform_points(sugar.points)[..., 2:].expand(-1, 3)
-                                        max_depth = point_depth.max()
-                                        depth = sugar.render_image_gaussian_rasterizer(
-                                                    camera_indices=camera_indices.item(),
-                                                    bg_color=max_depth + torch.zeros(3, dtype=torch.float, device=sugar.device),
-                                                    sh_deg=0,
-                                                    compute_color_in_rasterizer=False,#compute_color_in_rasterizer,
-                                                    compute_covariance_in_rasterizer=True,
-                                                    return_2d_radii=False,
-                                                    use_same_scale_in_all_directions=False,
-                                                    point_colors=point_depth,
-                                                )[..., 0]
-                                
-                                # If needed, compute which gaussians are close to the surface in the depth map.
-                                # Then, we sample points only in these gaussians.
-                                # TODO: Compute projections only for gaussians in visibility filter.
-                                # TODO: Is the torch.no_grad() a good idea?
-                                if sample_only_in_gaussians_close_to_surface:
-                                    with torch.no_grad():
-                                        gaussian_to_camera = torch.nn.functional.normalize(fov_camera.get_camera_center() - sugar.points, dim=-1)
-                                        gaussian_centers_in_camera_space = fov_camera.get_world_to_view_transform().transform_points(sugar.points)
-                                        
-                                        gaussian_centers_z = gaussian_centers_in_camera_space[..., 2] + 0.
-                                        gaussian_centers_map_z = sugar.get_points_depth_in_depth_map(fov_camera, depth, gaussian_centers_in_camera_space)
-                                        
-                                        gaussian_standard_deviations = (
-                                            sugar.scaling * quaternion_apply(quaternion_invert(sugar.quaternions), gaussian_to_camera)
-                                            ).norm(dim=-1)
-                                    
-                                        gaussians_close_to_surface = (gaussian_centers_map_z - gaussian_centers_z).abs() < close_gaussian_threshold * gaussian_standard_deviations
-                                        sampling_mask = sampling_mask * gaussians_close_to_surface
-                            
-                            n_gaussians_in_sampling = sampling_mask.sum()
-                            if n_gaussians_in_sampling > 0:
-                                sdf_samples, sdf_gaussian_idx = sugar.sample_points_in_gaussians(
-                                    num_samples=n_samples_for_sdf_regularization, 
-                                    sampling_scale_factor=sdf_sampling_scale_factor,
-                                    mask=sampling_mask,
-                                    probabilities_proportional_to_volume=sdf_sampling_proportional_to_volume,
-                                    )
-                                
-                                if use_sdf_estimation_loss or use_sdf_better_normal_loss:
-                                    fields = sugar.get_field_values(
-                                        sdf_samples, sdf_gaussian_idx, 
-                                        return_sdf=(use_sdf_estimation_loss or enforce_samples_to_be_on_surface) and (sdf_estimation_mode=='sdf') and iteration > start_sdf_estimation_from, 
-                                        density_threshold=density_threshold, density_factor=density_factor, 
-                                        return_sdf_grad=False, sdf_grad_max_value=10.,
-                                        return_closest_gaussian_opacities=use_sdf_better_normal_loss and iteration > start_sdf_better_normal_from,
-                                        return_beta=(use_sdf_estimation_loss or enforce_samples_to_be_on_surface) and (sdf_estimation_mode=='density') and iteration > start_sdf_estimation_from,
-                                        )
-                                
-                                if (use_sdf_estimation_loss or enforce_samples_to_be_on_surface) and iteration > start_sdf_estimation_from:
-                                    # Compute the depth of the points in the gaussians
-                                    sdf_samples_in_camera_space = fov_camera.get_world_to_view_transform().transform_points(sdf_samples)
-                                    sdf_samples_z = sdf_samples_in_camera_space[..., 2] + 0.
-                                    proj_mask = sdf_samples_z > fov_camera.znear
-                                    sdf_samples_map_z = sugar.get_points_depth_in_depth_map(fov_camera, depth, sdf_samples_in_camera_space[proj_mask])
-                                    sdf_estimation = sdf_samples_map_z - sdf_samples_z[proj_mask]
-                                    
-                                    if not sample_only_in_gaussians_close_to_surface:
-                                        raise NotImplementedError("Not implemented yet.")
-                                    
-                                    with torch.no_grad():
-                                        if normalize_by_sdf_std:
-                                            sdf_sample_std = gaussian_standard_deviations[sdf_gaussian_idx][proj_mask]
-                                        else:
-                                            sdf_sample_std = sugar.get_cameras_spatial_extent() / 10.
-                                    
-                                    if use_sdf_estimation_loss:
-                                        if sdf_estimation_mode == 'sdf':
-                                            sdf_values = fields['sdf'][proj_mask]
-                                            if squared_sdf_estimation_loss:
-                                                sdf_estimation_loss = ((sdf_values - sdf_estimation.abs()) / sdf_sample_std).pow(2)
-                                            else:
-                                                sdf_estimation_loss = (sdf_values - sdf_estimation.abs()).abs() / sdf_sample_std
-                                            loss = loss + sdf_estimation_factor * sdf_estimation_loss.clamp(max=10.*sugar.get_cameras_spatial_extent()).mean()
-                                        elif sdf_estimation_mode == 'density':
-                                            beta = fields['beta'][proj_mask]
-                                            densities = fields['density'][proj_mask]
-                                            target_densities = torch.exp(-0.5 * sdf_estimation.pow(2) / beta.pow(2))
-                                            if squared_sdf_estimation_loss:
-                                                sdf_estimation_loss = ((densities - target_densities)).pow(2)
-                                            else:
-                                                sdf_estimation_loss = (densities - target_densities).abs()
-                                            loss = loss + sdf_estimation_factor * sdf_estimation_loss.mean()
-                                        else:
-                                            raise ValueError(f"Unknown sdf_estimation_mode: {sdf_estimation_mode}")
-
-                                    if enforce_samples_to_be_on_surface:
-                                        if squared_samples_on_surface_loss:
-                                            samples_on_surface_loss = (sdf_estimation / sdf_sample_std).pow(2)
-                                        else:
-                                            samples_on_surface_loss = sdf_estimation.abs() / sdf_sample_std
-                                        loss = loss + samples_on_surface_factor * samples_on_surface_loss.clamp(max=10.*sugar.get_cameras_spatial_extent()).mean()
-                                        
-                                if use_sdf_better_normal_loss and (iteration > start_sdf_better_normal_from):
-                                    if iteration == start_sdf_better_normal_from + 1:
-                                        CONSOLE.print("\n---INFO---\nStarting SDF better normal loss.")
-                                    closest_gaussians_idx = sugar.knn_idx[sdf_gaussian_idx]
-                                    # Compute minimum scaling
-                                    closest_min_scaling = sugar.scaling.min(dim=-1)[0][closest_gaussians_idx].detach().view(len(sdf_samples), -1)
-                                    
-                                    # Compute normals and flip their sign if needed
-                                    closest_gaussian_normals = sugar.get_normals(estimate_from_points=False)[closest_gaussians_idx]
-                                    samples_gaussian_normals = sugar.get_normals(estimate_from_points=False)[sdf_gaussian_idx]
-                                    closest_gaussian_normals = closest_gaussian_normals * torch.sign(
-                                        (closest_gaussian_normals * samples_gaussian_normals[:, None]).sum(dim=-1, keepdim=True)
-                                        ).detach()
-                                    
-                                    # Compute weights for normal regularization, based on the gradient of the sdf
-                                    closest_gaussian_opacities = fields['closest_gaussian_opacities'].detach()  # Shape is (n_samples, n_neighbors)
-                                    normal_weights = ((sdf_samples[:, None] - sugar.points[closest_gaussians_idx]) * closest_gaussian_normals).sum(dim=-1).abs()  # Shape is (n_samples, n_neighbors)
-                                    if sdf_better_normal_gradient_through_normal_only:
-                                        normal_weights = normal_weights.detach()
-                                    normal_weights =  closest_gaussian_opacities * normal_weights / closest_min_scaling.clamp(min=1e-6)**2  # Shape is (n_samples, n_neighbors)
-                                    
-                                    # The weights should have a sum of 1 because of the eikonal constraint
-                                    normal_weights_sum = normal_weights.sum(dim=-1).detach()  # Shape is (n_samples,)
-                                    normal_weights = normal_weights / normal_weights_sum.unsqueeze(-1).clamp(min=1e-6)  # Shape is (n_samples, n_neighbors)
-                                    
-                                    # Compute regularization loss
-                                    sdf_better_normal_loss = (samples_gaussian_normals - (normal_weights[..., None] * closest_gaussian_normals).sum(dim=-2)
-                                                              ).pow(2).sum(dim=-1)  # Shape is (n_samples,)
-                                    loss = loss + sdf_better_normal_factor * sdf_better_normal_loss.mean()
-                            else:
-                                CONSOLE.log("WARNING: No gaussians available for sampling.")
-                                
             else:
-                loss = 0.
-                
-            # Surface mesh optimization
-            if bind_to_surface_mesh:
-                surface_mesh = sugar.surface_mesh
-                
-                if use_surface_mesh_laplacian_smoothing_loss:
-                    loss = loss + surface_mesh_laplacian_smoothing_factor * mesh_laplacian_smoothing(
-                        surface_mesh, method=surface_mesh_laplacian_smoothing_method)
-                
-                if use_surface_mesh_normal_consistency_loss:
-                    loss = loss + surface_mesh_normal_consistency_factor * mesh_normal_consistency(surface_mesh)
+                # No rendering (freeze_gaussians mode)
+                loss = torch.tensor(0.0, device=device, requires_grad=True)
             
             # Update parameters
             loss.backward()
@@ -739,10 +433,6 @@ def coarse_training_without_reg_and_entropy(args):
                         gaussian_densifier.densify_and_prune(densify_grad_threshold, prune_opacity_threshold, 
                                                     cameras_spatial_extent, size_threshold)
                         CONSOLE.print("Gaussians densified and pruned. New number of gaussians:", len(sugar.points))
-                        
-                        if regularize and (iteration > regularize_from) and (iteration >= start_reset_neighbors_from):
-                            sugar.reset_neighbors()
-                            CONSOLE.print("Neighbors reset.")
                     
                     if iteration % opacity_reset_interval == 0:
                         gaussian_densifier.reset_opacity()
@@ -769,8 +459,6 @@ def coarse_training_without_reg_and_entropy(args):
                     CONSOLE.print("Sh coordinates dc:", sugar._sh_coordinates_dc.min().item(), sugar._sh_coordinates_dc.max().item(), sugar._sh_coordinates_dc.mean().item(), sugar._sh_coordinates_dc.std().item(), sep='   ')
                     CONSOLE.print("Sh coordinates rest:", sugar._sh_coordinates_rest.min().item(), sugar._sh_coordinates_rest.max().item(), sugar._sh_coordinates_rest.mean().item(), sugar._sh_coordinates_rest.std().item(), sep='   ')
                     CONSOLE.print("Opacities:", sugar.strengths.min().item(), sugar.strengths.max().item(), sugar.strengths.mean().item(), sugar.strengths.std().item(), sep='   ')
-                    if regularize_sdf and iteration > start_sdf_regularization_from:
-                        CONSOLE.print("Number of gaussians used for sampling in SDF regularization:", n_gaussians_in_sampling)
                 t0 = time.time()
                 
             # Save model

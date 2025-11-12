@@ -23,10 +23,6 @@ if __name__ == "__main__":
                         help='(Optional) If None, will automatically train a vanilla Gaussian Splatting model at the beginning of the training. '
                         'Else, skips the vanilla Gaussian Splatting optimization and use the checkpoint in the provided directory.')
     
-    # Regularization for coarse SuGaR
-    parser.add_argument('-r', '--regularization_type', type=str,
-                        help='(Required) Type of regularization to use for coarse SuGaR. Can be "sdf", "density", "dn_consistency", "no_regularization", or "no_reg_and_entropy". ')
-    
     # Extract mesh
     parser.add_argument('-l', '--surface_level', type=float, default=0.3, 
                         help='Surface level to extract the mesh at. Default is 0.3')
@@ -41,11 +37,9 @@ if __name__ == "__main__":
     parser.add_argument('--center_bbox', type=str2bool, default=True, 
                         help='If True, center the bbox. Default is False.')
     
-    # Parameters for refined SuGaR
+    # Parameters for refined SuGaR (refinement_iterations is set to 0, but logic still runs)
     parser.add_argument('-g', '--gaussians_per_triangle', type=int, default=1, 
                         help='Number of gaussians per triangle.')
-    parser.add_argument('-f', '--refinement_iterations', type=int, default=15_000, 
-                        help='Number of refinement iterations.')
     
     # (Optional) Parameters for textured mesh extraction
     parser.add_argument('-t', '--export_obj', type=str2bool, default=True, 
@@ -72,9 +66,6 @@ if __name__ == "__main__":
                         help='Use standard config for a low poly mesh, with 200k vertices and 6 Gaussians per triangle.')
     parser.add_argument('--high_poly', type=str2bool, default=False,
                         help='Use standard config for a high poly mesh, with 1M vertices and 1 Gaussians per triangle.')
-    parser.add_argument('--refinement_time', type=str, default=None, 
-                        help="Default configs for time to spend on refinement. Can be 'short', 'medium' or 'long'.")
-      
     # Evaluation split
     parser.add_argument('--eval', type=str2bool, default=True, help='Use eval split.')
 
@@ -92,15 +83,9 @@ if __name__ == "__main__":
         args.n_vertices_in_mesh = 1_000_000
         args.gaussians_per_triangle = 1
         print('Using high poly config.')
-    if args.refinement_time == 'short':
-        args.refinement_iterations = 2_000
-        print('Using short refinement time.')
-    if args.refinement_time == 'medium':
-        args.refinement_iterations = 7_000
-        print('Using medium refinement time.')
-    if args.refinement_time == 'long':
-        args.refinement_iterations = 15_000
-        print('Using long refinement time.')
+    # Set refinement iterations to 0 (refinement logic still runs, just with 0 iterations)
+    args.refinement_iterations = 2000
+    
     if args.export_obj:
         print('Will export a UV-textured mesh as an .obj file.')
     if args.export_ply:
@@ -136,12 +121,10 @@ if __name__ == "__main__":
             -s {args.scene_path} \
             -c {gs_checkpoint_dir} \
             -i 7_000 \
-            -r {args.regularization_type} \
             -l {args.surface_level} \
             -v {args.n_vertices_in_mesh} \
             --project_mesh_on_surface_points {args.project_mesh_on_surface_points} \
             -g {args.gaussians_per_triangle} \
-            -f {args.refinement_iterations} \
             --bboxmin {args.bboxmin} \
             --bboxmax {args.bboxmax} \
             --center_bbox {args.center_bbox} \
@@ -153,7 +136,6 @@ if __name__ == "__main__":
             --export_ply {args.export_ply} \
             --low_poly {args.low_poly} \
             --high_poly {args.high_poly} \
-            --refinement_time {args.refinement_time} \
             --eval {args.eval} \
             --gpu {args.gpu} \
             --white_background {args.white_background}"
