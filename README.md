@@ -195,21 +195,27 @@ conda env create -f environment.yml
 conda activate sugar
 ```
 
-If this command fails to create a working environment, you can try to install the required packages manually by running the following commands:
+If the solver fails (older Conda/Mamba releases occasionally choke on CUDA 12.x builds), you can recreate the environment manually:
+
 ```shell
-conda create --name sugar -y python=3.9
+conda create --name sugar -y python=3.10
 conda activate sugar
-conda install pytorch==2.0.1 torchvision==0.15.2 torchaudio==2.0.2 pytorch-cuda=11.8 -c pytorch -c nvidia
-conda install -c fvcore -c iopath -c conda-forge fvcore iopath
-conda install pytorch3d==0.7.4 -c pytorch3d
-conda install -c plotly plotly
-conda install -c conda-forge rich
-conda install -c conda-forge plyfile==0.8.1
-conda install -c conda-forge jupyterlab
-conda install -c conda-forge nodejs
-conda install -c conda-forge ipywidgets
-pip install open3d
-pip install --upgrade PyMCubes
+
+# Core deep-learning stack (CUDA 12.1 toolchain + PyTorch 2.4.1)
+conda install -c pytorch -c nvidia pytorch=2.4.1 pytorch-cuda=12.1 torchvision=0.19.1 torchaudio=2.4.1
+conda install -c nvidia cuda-toolkit=12.1 cuda-nvcc=12.1
+
+# Geometry and rendering dependencies
+conda install -c pytorch3d pytorch3d=0.7.8
+conda install -c conda-forge fvcore iopath plyfile=0.8.1
+
+# Tooling and notebooks
+conda install -c conda-forge jupyterlab ipywidgets nodejs>=18
+conda install -c conda-forge rich plotly pandas>=2.1 scikit-learn>=1.3 scipy>=1.11 tqdm
+
+# Remaining Python packages
+pip install --upgrade pip
+pip install open3d==0.18.0 pymcubes dash dash-core-components dash-html-components dash-table flask werkzeug click addict pyquaternion
 ```
 
 #### b) Install the Gaussian Splatting rasterizer
@@ -218,9 +224,9 @@ Run the following commands inside the `SuGaR` directory to install the additiona
 
 ```shell
 cd gaussian_splatting/submodules/diff-gaussian-rasterization/
-pip install -e .
+pip install --no-deps --no-build-isolation -e .
 cd ../simple-knn/
-pip install -e .
+pip install --no-deps --no-build-isolation -e .
 cd ../../../
 ```
 Please refer to the <a href="https://github.com/graphdeco-inria/gaussian-splatting">3D Gaussian Splatting repository</a> for more details.
@@ -232,8 +238,17 @@ Installing Nvdiffrast is optional but will greatly speed up the textured mesh ex
 ```shell
 git clone https://github.com/NVlabs/nvdiffrast
 cd nvdiffrast
-pip install .
+pip install --no-build-isolation -e .
 cd ../
+```
+
+After activating the environment, remember to expose the CUDA toolkit and PyTorch libraries:
+
+```shell
+export CUDA_HOME="$CONDA_PREFIX"
+export PATH="$CUDA_HOME/bin:$PATH"
+# Add PyTorch libraries to LD_LIBRARY_PATH (required for CUDA extensions)
+export LD_LIBRARY_PATH="$CONDA_PREFIX/lib/python3.10/site-packages/torch/lib:$CUDA_HOME/lib:$CUDA_HOME/lib64:$LD_LIBRARY_PATH"
 ```
 
 </details>
